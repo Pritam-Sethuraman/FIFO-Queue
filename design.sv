@@ -1,39 +1,57 @@
-module fifo (
-    input logic clk,
-    input logic reset,
-    input logic write_en,
-    input logic read_en,
-    input logic [7:0] data_in,
-    output logic [7:0] data_out,
-    output logic full,
-    output logic empty
+module fifo #(
+  parameter WIDTH = 8,   // Data width
+  parameter DEPTH = 16   // FIFO depth
+) (
+  input logic clk,
+  input logic rst,
+  input logic wr_en,     // Write enable
+  input logic rd_en,     // Read enable
+  input logic [WIDTH-1:0] din,  // Data input
+  output logic [WIDTH-1:0] dout, // Data output
+  output logic full,     // FIFO full status
+  output logic empty     // FIFO empty status
 );
 
-    parameter DEPTH = 16;
-    logic [7:0] fifo_mem [0:DEPTH-1];
-    logic [3:0] write_ptr, read_ptr;
-    logic [4:0] count;
+  logic [WIDTH-1:0] mem [0:DEPTH-1];  // Memory array
+  logic [$clog2(DEPTH):0] rd_ptr, wr_ptr;  // Read and write pointers
+  logic [$clog2(DEPTH):0] count;  // Number of elements in FIFO
 
-    assign full = (count == DEPTH);
-    assign empty = (count == 0);
-
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset) begin
-            write_ptr <= 0;
-            read_ptr <= 0;
-            count <= 0;
-        end else begin
-            if (write_en && !full) begin
-                fifo_mem[write_ptr] <= data_in;
-                write_ptr <= write_ptr + 1;
-                count <= count + 1;
-            end
-            if (read_en && !empty) begin
-                data_out <= fifo_mem[read_ptr];
-                read_ptr <= read_ptr + 1;
-                count <= count - 1;
-            end
-        end
+  // Write logic
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+      wr_ptr <= 0;
+    end else if (wr_en && !full) begin
+      mem[wr_ptr] <= din;
+      wr_ptr <= wr_ptr + 1;
     end
+  end
+
+  // Read logic
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+      rd_ptr <= 0;
+      dout <= 0;
+    end else if (rd_en && !empty) begin
+      dout <= mem[rd_ptr];
+      rd_ptr <= rd_ptr + 1;
+    end
+  end
+
+  // Count logic
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+      count <= 0;
+    end else begin
+      case ({wr_en, rd_en})
+        2'b10: if (!full) count <= count + 1; // Write only
+        2'b01: if (!empty) count <= count - 1; // Read only
+        2'b11: ; // Simultaneous read and write, count remains unchanged
+      endcase
+    end
+  end
+
+  // Status flags
+  assign full = (count == DEPTH);
+  assign empty = (count == 0);
 
 endmodule
